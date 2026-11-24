@@ -165,6 +165,12 @@ h1{font-size:28px;line-height:1.2}
 .badge{font-size:10px;background:var(--fg);color:var(--bg);border-radius:4px;padding:0 6px;line-height:18px;font-weight:500;flex:none}
 .badge.w{background:var(--warn);color:#fff}
 .none{padding:24px;text-align:center;color:var(--faint)}
+.cuf{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:6px;align-items:center}
+.cuf input,.cuf select{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:6px 8px;font-size:13px;min-width:0}
+.cuf .lab{grid-column:1/-1;margin:0}
+.cuwrap{display:flex;align-items:stretch}.cuwrap .it{flex:1}
+.cudel{flex:none;color:var(--faint);padding:0 12px;font-size:12px;border-bottom:1px solid var(--line)}.cudel:hover{color:var(--warn)}
+.tag.cu{background:var(--accent-soft);color:var(--accent)}
 @media(max-width:640px){
   h1{font-size:23px}
   .pick{top:auto;left:0;right:0;width:auto;height:84vh;border-left:0;border-top:1px solid var(--line);border-radius:16px 16px 0 0}
@@ -184,7 +190,7 @@ const mkSlot=()=>({g:null,sk:[null,null],tm:['','','',''],cl:false});
 const mkTeam=()=>({tp:'',slots:[mkSlot(),mkSlot(),mkSlot()]});
 let S={limit:20,teams:[mkTeam()]};
 // プリセット（編成案）：シートごとに独立した編成。武将・戦法の重複不可はシート内だけで判定する
-let B={cur:0,sheets:[{n:'編成案1',s:S}]},ren=-1;
+let B={cur:0,sheets:[{n:'編成案1',s:S}],cu:{}},ren=-1;
 const nextName=()=>{let i=B.sheets.length+1;while(B.sheets.some(x=>x.n==='編成案'+i))i++;return '編成案'+i};
 let P=null,arm=null,ioMsg='',ioText='';
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -192,10 +198,20 @@ const bestTp=g=>{const r='SABC';let b=0,bi=0;[...g.a].forEach((x,i)=>{const v=3-
 const aptOf=(g,t)=>g.a[TP.indexOf(t)];
 const tomeCount=g=>g.s>=5?4:3;
 const s3opts=(cat,exceptWhat)=>TO[cat]?TO[cat].s3.filter(x=>!exceptWhat.includes(x)):[];
+// カスタム戦法：ツールに無い戦法（シーズン限定など）を名前だけで登録する。全編成案で共通、全兵種で使える
+const CUT=['アクティブ','パッシブ','指揮','突撃','兵種','陣法'];
+function cuDef(x){
+  const n=String(x&&x.n||'').trim().slice(0,20);if(!n)return null;
+  if(SK[n]&&!SK[n].cu)return null; // 既存の戦法と同名なら登録しない（既存を使う）
+  return {n,r:['S','A','B','C'].includes(x.r)?x.r:'',t:CUT.includes(x.t)?x.t:'アクティブ',tr:TP.join(''),tg:'',p:'',src:'',x:'カスタム戦法（編成ノートで追加）',in:1,cu:1};
+}
+function cuAdd(x){const d=cuDef(x);if(d){SK[d.n]=d;B.cu[d.n]={n:d.n,r:d.r,t:d.t}}return d}
+const cuList=()=>Object.keys(B.cu||{});
 function sanitize(raw){
   const out={limit:20,teams:[]};
   if(!raw||typeof raw!=='object')return null;
   const lim=parseInt(raw.limit,10);if(lim>=1&&lim<=200)out.limit=lim;
+  if(raw.cu&&typeof raw.cu==='object')Object.values(raw.cu).forEach(cuAdd); // 書き出しJSONに含まれるカスタム戦法
   const ug=new Set(),us=new Set();
   const tl=Array.isArray(raw.teams)?raw.teams.slice(0,MAXT):[];
   // pass 1: own skills reserved
@@ -226,10 +242,10 @@ function sanitize(raw){
 function save(){B.sheets[B.cur].s=S;try{localStorage.setItem(KEY2,JSON.stringify(B))}catch(e){}}
 function load(){try{
   const r2=localStorage.getItem(KEY2);
-  if(r2){const raw=JSON.parse(r2),sh=(Array.isArray(raw.sheets)?raw.sheets:[]).slice(0,MAXSH).map((x,i)=>({n:String(x&&x.n||'編成案'+(i+1)).slice(0,30),s:sanitize(x&&x.s)})).filter(x=>x.s);
-    if(sh.length){B={cur:Math.min(Math.max(0,raw.cur|0),sh.length-1),sheets:sh};S=B.sheets[B.cur].s;return}}
+  if(r2){const raw=JSON.parse(r2);if(raw.cu&&typeof raw.cu==='object')Object.values(raw.cu).forEach(cuAdd);const sh=(Array.isArray(raw.sheets)?raw.sheets:[]).slice(0,MAXSH).map((x,i)=>({n:String(x&&x.n||'編成案'+(i+1)).slice(0,30),s:sanitize(x&&x.s)})).filter(x=>x.s);
+    if(sh.length){B={cur:Math.min(Math.max(0,raw.cur|0),sh.length-1),sheets:sh,cu:B.cu};S=B.sheets[B.cur].s;return}}
   const r=localStorage.getItem(KEY); // 旧形式（シート1枚）を編成案1として引き継ぐ
-  if(r){const s=sanitize(JSON.parse(r));if(s){S=s;B={cur:0,sheets:[{n:'編成案1',s}]}}}
+  if(r){const s=sanitize(JSON.parse(r));if(s){S=s;B={cur:0,sheets:[{n:'編成案1',s}],cu:B.cu}}}
 }catch(e){}}
 function sheetHtml(){
   let h=`<section class="sheetbar"><div class="sheets" role="tablist">${B.sheets.map((x,i)=>{const n=x.s.teams.reduce((a,t)=>a+t.slots.filter(s=>s.g).length,0);
@@ -240,6 +256,10 @@ function sheetHtml(){
   h+=`<button class="btn" data-act="sheetdup" ${B.sheets.length>=MAXSH?'disabled':''}>複製</button>`;
   if(B.sheets.length>1)h+=`<button class="btn danger ${arm==='sh'?'arm':''}" data-act="sheetdel">${arm==='sh'?'もう一度で削除':'この編成案を削除'}</button>`;
   return h+`</div></section>`;
+}
+function exportJson(){ // 今の編成案＋使っているカスタム戦法の定義
+  const cu={};S.teams.forEach(t=>t.slots.forEach(s=>s.sk.forEach(k=>{if(k&&SK[k]&&SK[k].cu)cu[k]=B.cu[k]})));
+  return JSON.stringify(Object.keys(cu).length?{...S,cu}:S);
 }
 function switchSheet(i){save();B.cur=i;S=B.sheets[i].s;P=null;ren=-1;ioText='';ioMsg=''}
 function used(){
@@ -324,7 +344,7 @@ function slotHtml(t,ti,s,si,U){
   return h+`</div></div>`;
 }
 function pickerHtml(U){
-  const q=P.q.trim();let items='',title='',chips='';
+  const q=P.q.trim();let items='',title='',chips='',cuForm='';
   if(P.kind==='gen'){
     const cur=S.teams[P.t],slot=cur.slots[P.s],cc=teamCost(cur)-(slot.g?G[slot.g].c:0);
     title=`部隊${P.t+1} ・ ${ROLE[P.s]}の武将`;
@@ -341,13 +361,18 @@ function pickerHtml(U){
     const tp=S.teams[P.t].tp,s=S.teams[P.t].slots[P.s],g=G[s.g];title=`${g.n} の継承戦法 ${P.k+1}（${tp}兵）`;
     const types=['全','アクティブ','パッシブ','指揮','突撃','兵種','陣法'];
     chips=types.map(f=>`<button class="chip ${P.f===f?'on':''}" data-act="filt" data-v="${f}">${f}</button>`).join('');
-    const list=D.pool.map(n=>SK[n]).filter(k=>k.tr.includes(tp)&&(P.f==='全'||k.t.startsWith(P.f))&&(!q||k.n.includes(q)||k.x.includes(q)||k.src.includes(q)));
+    const list=[...cuList(),...D.pool].map(n=>SK[n]).filter(k=>k.tr.includes(tp)&&(P.f==='全'||k.t.startsWith(P.f))&&(!q||k.n.includes(q)||k.x.includes(q)||k.src.includes(q)));
     items=list.map(k=>{const u=U.us[k.n];
-      return `<button class="it ${u?'used':''}" data-act="${u?'jump':'setsk'}" data-n="${esc(k.n)}" ${u?`data-t="${u.t}"`:''}>${rk(k.n)}<span class="main"><div class="nm">${esc(k.n)}<span class="tag">${esc(k.t)}</span><span class="gmeta">${esc(k.p)}</span></div><div class="ds">${esc(k.x)}</div></span>${u?`<span class="badge">部隊${u.t+1}${u.own?'・固有':''}</span>`:''}</button>`}).join('');
+      const it=`<button class="it ${u?'used':''}" data-act="${u?'jump':'setsk'}" data-n="${esc(k.n)}" ${u?`data-t="${u.t}"`:''}>${rk(k.n)}<span class="main"><div class="nm">${esc(k.n)}<span class="tag">${esc(k.t)}</span>${k.cu?'<span class="tag cu">カスタム</span>':''}<span class="gmeta">${esc(k.p)}</span></div><div class="ds">${esc(k.x)}</div></span>${u?`<span class="badge">部隊${u.t+1}${u.own?'・固有':''}</span>`:''}</button>`;
+      return k.cu?`<div class="cuwrap">${it}<button class="cudel" data-act="cudel" data-n="${esc(k.n)}" title="カスタム戦法を削除（全編成案から外れます）">${arm==='cu:'+k.n?'本当に削除':'削除'}</button></div>`:it}).join('');
+    cuForm=`<div class="cuf"><div class="lab">一覧に無い戦法を追加（シーズン限定など）</div><input id="cuN" maxlength="20" placeholder="戦法名" value="${esc(list.length?'':P.q)}" aria-label="カスタム戦法の名前">
+      <select id="cuT" aria-label="種別">${CUT.map(t=>`<option>${t}</option>`).join('')}</select>
+      <select id="cuR" aria-label="ランク"><option value="S">S</option><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="">－</option></select>
+      <button class="btn pri" data-act="cuadd">追加</button></div>`;
   }
   return `<div class="back" data-act="close"></div><aside class="pick"><div class="ph"><div class="row"><h2>${esc(title)}</h2><button class="btn" data-act="close">閉じる</button></div>
-    <input type="search" placeholder="検索" value="${esc(P.q)}" data-act="q"><div class="chips">${chips}</div></div>
-    <div class="plist">${items||'<div class="none">該当なし</div>'}</div></aside>`;
+    <input type="search" placeholder="検索" value="${esc(P.q)}" data-act="q"><div class="chips">${chips}</div>${cuForm}</div>
+    <div class="plist">${items||`<div class="none">該当なし${cuForm?'。上の欄からカスタム戦法として追加できます':''}</div>`}</div></aside>`;
 }
 function cleanSkills(team){ // 部隊の兵種に合わない継承戦法を外す。外した戦法名を返す
   const out=[];team.slots.forEach(s=>{s.sk=s.sk.map(k=>{if(k&&!SK[k].tr.includes(team.tp)){out.push(k);return null}return k})});return out;
@@ -471,9 +496,9 @@ document.addEventListener('click',e=>{
 },true);
 document.addEventListener('click',e=>{
   const b=e.target.closest('[data-act]');if(!b||b.tagName==='SELECT'||b.tagName==='INPUT')return;
-  const a=b.dataset.act,pk=(a==='setg'||a==='setsk')&&P,t=pk?P.t:+b.dataset.t,s=pk?P.s:+b.dataset.s;
+  const a=b.dataset.act,pk=(a==='setg'||a==='setsk'||a==='cuadd')&&P,t=pk?P.t:+b.dataset.t,s=pk?P.s:+b.dataset.s;
   const slot=()=>S.teams[t].slots[s];
-  if(a!=='reset'&&a!=='delteam'&&a!=='sheetdel')arm=null;
+  if(a!=='reset'&&a!=='delteam'&&a!=='sheetdel'&&a!=='cudel')arm=null;
   if(a!=='renok'&&a!=='renstart')ren=-1;
   switch(a){
     case 'none':return;
@@ -494,13 +519,22 @@ document.addEventListener('click',e=>{
     case 'jump':return jump(+b.dataset.t);
     case 'setg':{const g=G[b.dataset.n],sl=slot(),T=S.teams[t];if(sl.g!==g.n){sl.g=g.n;sl.sk=[null,null];sl.tm=['','','',''];sl.cl=false;}if(!T.tp)T.tp=bestTp(g);P=null;break}
     case 'setsk':slot().sk[P.k]=b.dataset.n;P=null;break;
+    case 'cuadd':{const nm=(document.getElementById('cuN').value||'').trim().slice(0,20);
+      if(!nm){toast('戦法名を入力してください');return}
+      const U=used();if(U.us[nm]){toast(`${nm} は部隊${U.us[nm].t+1}で使用中です`);return}
+      const ex=SK[nm];
+      if(ex&&!ex.cu){if(!ex.in||!ex.tr.includes(S.teams[P.t].tp)){toast(`${nm} は一覧にありますが、ここには付けられません`);return}slot().sk[P.k]=nm;P=null;toast(`${nm} は一覧にある戦法なのでそのまま付けました`);break}
+      const d=cuAdd({n:nm,t:document.getElementById('cuT').value,r:document.getElementById('cuR').value});
+      slot().sk[P.k]=d.n;P=null;toast(`カスタム戦法「${d.n}」を追加しました`);break}
+    case 'cudel':{const n=b.dataset.n;if(arm!=='cu:'+n){arm='cu:'+n;break}
+      arm=null;delete B.cu[n];delete SK[n];B.sheets.forEach(x=>x.s.teams.forEach(t=>t.slots.forEach(s=>{s.sk=s.sk.map(k=>k===n?null:k)})));toast(`カスタム戦法「${n}」を削除しました`);break}
     case 'clrsk':slot().sk[+b.dataset.k]=null;break;
     case 'ttp':{const T=S.teams[t];if(T.tp===b.dataset.v)break;T.tp=b.dataset.v;const rm=cleanSkills(T);if(rm.length)toast(`${T.tp}兵に合わないため外しました：${rm.join('・')}`);break}
     case 'fold':slot().cl=!slot().cl;break;
     case 'foldteam':{const T=S.teams[t],o=T.slots.some(x=>x.g&&!x.cl);T.slots.forEach(x=>x.cl=o);break}
     case 'foldall':{const o=anyOpen();S.teams.forEach(T=>T.slots.forEach(x=>x.cl=o));break}
-    case 'export':ioText=JSON.stringify(S);ioMsg='書き出しました';break;
-    case 'copy':{ioText=JSON.stringify(S);render();const ta=document.getElementById('io');ta.select();
+    case 'export':ioText=exportJson();ioMsg='書き出しました';break;
+    case 'copy':{ioText=exportJson();render();const ta=document.getElementById('io');ta.select();
       (navigator.clipboard?navigator.clipboard.writeText(ioText):Promise.reject()).then(()=>{ioMsg='コピーしました';render()}).catch(()=>{ioMsg='選択しました。手動でコピーしてください';render();document.getElementById('io').select()});return}
     case 'import':{try{const s=sanitize(JSON.parse(document.getElementById('io').value));if(!s)throw 0;S=s;ioMsg='読み込みました（不正・重複は除外）'}catch(x){ioMsg='JSONを読み取れませんでした'}break}
   }
@@ -526,6 +560,7 @@ document.addEventListener('change',e=>{
     save();render()}
 });
 document.addEventListener('keydown',e=>{
+  if(e.target.id==='cuN'&&e.key==='Enter'&&!e.isComposing){const bt=document.querySelector('[data-act=cuadd]');if(bt)bt.click();return}
   if(e.target.id==='ren'&&!e.isComposing){if(e.key==='Enter'){const v=e.target.value.trim();if(v)B.sheets[B.cur].n=v.slice(0,30);ren=-1;save();render();return}if(e.key==='Escape'){ren=-1;render();return}}
   if(e.key!=='Escape')return;if(MV)return cancelMove();if(P){P=null;render()}});
 const SAMPLE={limit:20,teams:[{tp:'盾',slots:[
@@ -537,7 +572,7 @@ load();render();
 </script>
 
 <script>
-// オフライン用のキャッシュ（Service Worker）。版 b3f33c0713
+// オフライン用のキャッシュ（Service Worker）。版 a209bd88b4
 if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost')){
   addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 }

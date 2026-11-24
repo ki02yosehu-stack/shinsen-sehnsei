@@ -1,5 +1,5 @@
-// 編成ノート Service Worker。build_app.py が b3f33c0713 を版に置き換える
-const CACHE = 'hensei-b3f33c0713';
+// 編成ノート Service Worker。build_app.py が a209bd88b4 を版に置き換える
+const CACHE = 'hensei-a209bd88b4';
 const CORE = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'icon-maskable.png', 'apple-touch-icon.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE)).then(() => self.skipWaiting()));
